@@ -12,6 +12,7 @@ pub struct BlogContract {
 impl BlogContract {
     #[init]
     pub fn new() -> Self {
+        assert!(env::state_read::<Self>().is_none(), "Already initialized");
         Self {
             posts: UnorderedMap::new(b"s".to_vec()),
         }
