@@ -51,19 +51,14 @@ impl Contract {
     }
 
     pub fn update_post(&mut self, slug: String, title: String, text: String) {
-        let old_post = self.posts.get(&slug);
-        assert!(old_post.is_some(), "Post not exists");
+        self.assert_post_exists(&slug);
 
-        let old_post_unwraped = old_post.unwrap();
-        assert_eq!(
-            env::predecessor_account_id(),
-            old_post_unwraped.owner_id,
-            "Only the owner may call this method"
-        );
+        let old_post = self.posts.get(&slug).unwrap();
+        self.assert_post_owner(&old_post);
 
         let new_post = Post {
-            owner_id: old_post_unwraped.owner_id,
-            donation: old_post_unwraped.donation,
+            owner_id: old_post.owner_id,
+            donation: old_post.donation,
             title,
             text,
         };
@@ -71,38 +66,30 @@ impl Contract {
     }
 
     pub fn delete_post(&mut self, slug: String) {
-        let post = self.posts.get(&slug);
-        assert!(post.is_some(), "Post not exists");
-        assert_eq!(
-            env::predecessor_account_id(),
-            post.unwrap().owner_id,
-            "Only the owner may call this method"
-        );
+        self.assert_post_exists(&slug);
+
+        let post = self.posts.get(&slug).unwrap();
+        self.assert_post_owner(&post);
 
         self.posts.remove(&slug);
         self.slugs.remove(&slug);
     }
 
     pub fn withdraw_post_donation(&mut self, slug: String) {
-        let old_post = self.posts.get(&slug);
-        assert!(old_post.is_some(), "Post not exists");
+        self.assert_post_exists(&slug);
 
-        let old_post_unwraped = old_post.unwrap();
-        assert_eq!(
-            env::predecessor_account_id(),
-            old_post_unwraped.owner_id,
-            "Only the owner may call this method"
-        );
+        let old_post = self.posts.get(&slug).unwrap();
+        self.assert_post_owner(&old_post);
 
         let new_post = Post {
-            owner_id: old_post_unwraped.owner_id,
-            title: old_post_unwraped.title,
-            text: old_post_unwraped.text,
+            owner_id: old_post.owner_id,
+            title: old_post.title,
+            text: old_post.text,
             donation: 0,
         };
         self.posts.insert(&slug, &new_post);
 
-        let transfer_amount = old_post_unwraped.donation;
+        let transfer_amount = old_post.donation;
         Promise::new(env::predecessor_account_id()).transfer(transfer_amount);
         log!(
             "Transfer {} to {}",
@@ -113,15 +100,14 @@ impl Contract {
 
     #[payable]
     pub fn clap_post(&mut self, slug: String) {
-        let old_post = self.posts.get(&slug);
-        assert!(old_post.is_some(), "Post not exists");
-        let old_post_unwraped = old_post.unwrap();
+        self.assert_post_exists(&slug);
 
+        let old_post = self.posts.get(&slug).unwrap();
         let new_post = Post {
-            owner_id: old_post_unwraped.owner_id,
-            title: old_post_unwraped.title,
-            text: old_post_unwraped.text,
-            donation: old_post_unwraped.donation + env::attached_deposit(),
+            owner_id: old_post.owner_id,
+            title: old_post.title,
+            text: old_post.text,
+            donation: old_post.donation + env::attached_deposit(),
         };
         self.posts.insert(&slug, &new_post);
 
@@ -134,5 +120,18 @@ impl Contract {
 
     pub fn list_slugs(&self) -> Vec<String> {
         self.slugs.to_vec()
+    }
+
+    fn assert_post_exists(&self, slug: &String) {
+        let post = self.posts.get(&slug);
+        assert!(post.is_some(), "Post not exists");
+    }
+
+    fn assert_post_owner(&self, post: &Post) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            post.owner_id,
+            "Only the owner may call this method"
+        );
     }
 }
