@@ -75,7 +75,7 @@ impl Contract {
         self.slugs.remove(&slug);
     }
 
-    pub fn withdraw_post_donation(&mut self, slug: String) {
+    pub fn withdraw_post_donation(&mut self, slug: String) -> Promise {
         self.assert_post_exists(&slug);
 
         let old_post = self.posts.get(&slug).unwrap();
@@ -90,12 +90,13 @@ impl Contract {
         self.posts.insert(&slug, &new_post);
 
         let transfer_amount = old_post.donation;
-        Promise::new(env::predecessor_account_id()).transfer(transfer_amount);
         log!(
             "Transfer {} to {}",
             transfer_amount,
             env::predecessor_account_id()
         );
+
+        Promise::new(env::predecessor_account_id()).transfer(transfer_amount)
     }
 
     #[payable]
