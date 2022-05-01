@@ -135,3 +135,43 @@ impl Contract {
         );
     }
 }
+
+#[cfg(test)]
+
+mod tests {
+    use super::*;
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::{testing_env, MockedBlockchain, VMContext};
+    use std::convert::TryInto;
+
+    fn get_context(is_view: bool) -> VMContext {
+        VMContextBuilder::new()
+            .signer_account_id("bob_near".try_into().unwrap())
+            .is_view(is_view)
+            .build()
+    }
+
+    #[test]
+    fn check_publish_post() {
+        // set up the mock context into the testing environment
+        let context = get_context(false);
+        testing_env!(context);
+
+        // Set up contract object and call the new method
+        let mut contract = Contract::new();
+        // Publish post
+        let slug = "test-post".to_string();
+        let title = "Test Post".to_string();
+        let text = "Big news!".to_string();
+        contract.publish_post(slug.clone(), title.clone(), text.clone());
+
+        assert!(contract.get_post(slug.clone()).is_some(), "Post exists");
+        assert!(contract.get_post("404-post".to_string()).is_none());
+        assert!(contract.get_post(slug.clone()).unwrap().title == title.clone());
+        assert!(contract.get_post(slug.clone()).unwrap().text == text.clone());
+        assert!(
+            contract.get_post(slug.clone()).unwrap().donation == 0,
+            "Should be zero"
+        );
+    }
+}
