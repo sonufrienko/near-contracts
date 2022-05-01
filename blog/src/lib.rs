@@ -1,28 +1,138 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::UnorderedMap;
-use near_sdk::{env, near_bindgen, PanicOnDefault};
+use near_sdk::collections::{UnorderedMap, UnorderedSet};
+use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::{env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise};
 
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-pub struct BlogContract {
-    posts: UnorderedMap<String, String>,
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Post {
+    pub owner_id: AccountId,
+    pub title: String,
+    pub text: String,
+    pub donation: Balance,
 }
 
 #[near_bindgen]
-impl BlogContract {
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct Contract {
+    posts: UnorderedMap<String, Post>,
+    slugs: UnorderedSet<String>,
+}
+
+#[near_bindgen]
+impl Contract {
     #[init]
     pub fn new() -> Self {
         assert!(env::state_read::<Self>().is_none(), "Already initialized");
         Self {
-            posts: UnorderedMap::new(b"s".to_vec()),
+            posts: UnorderedMap::new(b"p"),
+            slugs: UnorderedSet::new(b"s"),
         }
     }
 
-    pub fn publish_post(&mut self, slug: String, text: String) {
-        self.posts.insert(&slug, &text);
+    #[payable]
+    pub fn publish_post(&mut self, slug: String, title: String, text: String) {
+        let account_id = env::signer_account_id();
+        let donation = env::attached_deposit();
+        let post = Post {
+            owner_id: account_id,
+            title,
+            text,
+            donation,
+        };
+
+        self.posts.insert(&slug, &post);
+        self.slugs.insert(&slug);
     }
 
-    pub fn get_post(&self, slug: String) -> Option<String> {
+    pub fn get_post(&self, slug: String) -> Option<Post> {
+        log!(slug);
         self.posts.get(&slug)
+    }
+
+    pub fn update_post(&mut self, slug: String, title: String, text: String) {
+        let old_post = self.posts.get(&slug);
+        assert!(old_post.is_some(), "Post not exists");
+
+        let old_post_unwraped = old_post.unwrap();
+        assert_eq!(
+            env::predecessor_account_id(),
+            old_post_unwraped.owner_id,
+            "Only the owner may call this method"
+        );
+
+        let new_post = Post {
+            owner_id: old_post_unwraped.owner_id,
+            donation: old_post_unwraped.donation,
+            title,
+            text,
+        };
+        self.posts.insert(&slug, &new_post);
+    }
+
+    pub fn delete_post(&mut self, slug: String) {
+        let post = self.posts.get(&slug);
+        assert!(post.is_some(), "Post not exists");
+        assert_eq!(
+            env::predecessor_account_id(),
+            post.unwrap().owner_id,
+            "Only the owner may call this method"
+        );
+
+        self.posts.remove(&slug);
+        self.slugs.remove(&slug);
+    }
+
+    pub fn withdraw_post_donation(&mut self, slug: String) {
+        let old_post = self.posts.get(&slug);
+        assert!(old_post.is_some(), "Post not exists");
+
+        let old_post_unwraped = old_post.unwrap();
+        assert_eq!(
+            env::predecessor_account_id(),
+            old_post_unwraped.owner_id,
+            "Only the owner may call this method"
+        );
+
+        let new_post = Post {
+            owner_id: old_post_unwraped.owner_id,
+            title: old_post_unwraped.title,
+            text: old_post_unwraped.text,
+            donation: 0,
+        };
+        self.posts.insert(&slug, &new_post);
+
+        let transfer_amount = old_post_unwraped.donation;
+        Promise::new(env::predecessor_account_id()).transfer(transfer_amount);
+        log!(
+            "Transfer {} to {}",
+            transfer_amount,
+            env::predecessor_account_id()
+        );
+    }
+
+    #[payable]
+    pub fn clap_post(&mut self, slug: String) {
+        let old_post = self.posts.get(&slug);
+        assert!(old_post.is_some(), "Post not exists");
+        let old_post_unwraped = old_post.unwrap();
+
+        let new_post = Post {
+            owner_id: old_post_unwraped.owner_id,
+            title: old_post_unwraped.title,
+            text: old_post_unwraped.text,
+            donation: old_post_unwraped.donation + env::attached_deposit(),
+        };
+        self.posts.insert(&slug, &new_post);
+
+        log!(
+            "Clap amount {} from {}",
+            env::attached_deposit(),
+            env::signer_account_id()
+        );
+    }
+
+    pub fn list_slugs(&self) -> Vec<String> {
+        self.slugs.to_vec()
     }
 }
