@@ -168,8 +168,8 @@ mod tests {
 
         assert!(contract.get_post(slug.clone()).is_some(), "Post exists");
         assert!(contract.get_post("404-post".to_string()).is_none());
-        assert!(contract.get_post(slug.clone()).unwrap().title == title.clone());
-        assert!(contract.get_post(slug.clone()).unwrap().text == text.clone());
+        assert!(contract.get_post(slug.clone()).unwrap().title == title);
+        assert!(contract.get_post(slug.clone()).unwrap().text == text);
         assert!(
             contract.get_post(slug.clone()).unwrap().donation == 0,
             "Should be zero"
